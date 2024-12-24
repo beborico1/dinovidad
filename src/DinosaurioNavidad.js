@@ -39,7 +39,7 @@ const DinosaurioNavidad = () => {
       {/* <Video360Player /> */}
 
       <div className="relative w-full h-full">
-        <div className="absolute top-32 left-1/2 -translate-x-1/2 z-10">
+        <div className="absolute w-full h-full left-1/2 -translate-x-1/2 z-10">
           <Suspense fallback={<div className="text-2xl">Cargando modelo...</div>}>
             <ModelViewer />
           </Suspense>

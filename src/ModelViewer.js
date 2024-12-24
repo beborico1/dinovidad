@@ -1,107 +1,178 @@
-import React, { useEffect, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { useGLTF, OrbitControls, Environment } from '@react-three/drei';
-import * as THREE from 'three';
+import React, { useEffect, useRef } from 'react';
+import {
+    Engine,
+    Scene,
+    Vector3,
+    ArcRotateCamera,
+    HemisphericLight,
+    DirectionalLight,
+    SceneLoader,
+    Color4,
+    PBRMaterial,
+    StandardMaterial,
+    Texture,
+    CubeTexture
+} from '@babylonjs/core';
+import '@babylonjs/loaders/glTF';
 
-// Create a custom material loader
-const createMaterial = (oldMaterial) => {
-    // Create base physical material
-    const material = new THREE.MeshPhysicalMaterial({
-        color: 0x808080,
-        roughness: 0.5,
-        metalness: 0.5,
-    });
-
-    if (oldMaterial) {
-        // Transfer standard properties
-        material.color.copy(oldMaterial.color || new THREE.Color(0x808080));
-        material.roughness = oldMaterial.roughness !== undefined ? oldMaterial.roughness : 0.5;
-        material.metalness = oldMaterial.metalness !== undefined ? oldMaterial.metalness : 0.5;
-        material.normalMap = oldMaterial.normalMap || null;
-        material.normalScale.copy(oldMaterial.normalScale || new THREE.Vector2(1, 1));
-        material.map = oldMaterial.map || null;
-
-        // Handle PBR Specular Glossiness properties
-        if (oldMaterial.userData && oldMaterial.userData.gltfExtensions &&
-            oldMaterial.userData.gltfExtensions.KHR_materials_pbrSpecularGlossiness) {
-            const specGloss = oldMaterial.userData.gltfExtensions.KHR_materials_pbrSpecularGlossiness;
-
-            if (specGloss.diffuseFactor) {
-                material.color.fromArray(specGloss.diffuseFactor);
-            }
-            if (specGloss.glossinessFactor !== undefined) {
-                material.roughness = 1 - specGloss.glossinessFactor;
-            }
-            if (specGloss.diffuseTexture) {
-                material.map = oldMaterial.map;
-            }
+// We'll keep the original materials from the GLB
+const setupMaterial = (material, scene) => {
+    if (material) {
+        // Ensure PBR materials are properly configured
+        if (material instanceof PBRMaterial) {
+            material.transparencyMode = 0; // OPAQUE
+            material.metallicF0Factor = 1.0;
+            material.useRoughnessFromMetallicTextureBlue = true;
+            material.useMetallicFromMetallicTextureBlue = true;
+            material.useRoughnessFromMetallicTextureGreen = true;
+            material.useAmbientOcclusionFromMetallicTextureRed = true;
         }
     }
-
     return material;
 };
 
-function Model() {
-    const { scene } = useGLTF('/model.glb');
-    const [hasLoaded, setHasLoaded] = useState(false);
+export function ModelViewer() {
+    const canvasRef = useRef(null);
+    const engineRef = useRef(null);
+    const sceneRef = useRef(null);
 
     useEffect(() => {
-        if (scene) {
-            scene.traverse((child) => {
-                if (child.isMesh) {
-                    const oldMaterial = child.material;
-                    child.material = createMaterial(oldMaterial);
-
-                    console.log('Mesh:', child.name);
-                    console.log('New material:', child.material);
-                    if (oldMaterial.userData && oldMaterial.userData.gltfExtensions) {
-                        console.log('GLTF Extensions:', oldMaterial.userData.gltfExtensions);
-                    }
-                }
+        if (canvasRef.current) {
+            // Create engine with alpha support
+            engineRef.current = new Engine(canvasRef.current, true, {
+                preserveDrawingBuffer: true,
+                stencil: true,
+                antialias: true,
+                premultipliedAlpha: false,
+                alpha: true
             });
-            setHasLoaded(true);
+
+            // Create scene
+            sceneRef.current = new Scene(engineRef.current);
+            const scene = sceneRef.current;
+
+            // Set transparent background
+            scene.clearColor = new Color4(0, 0, 0, 0);
+            scene.imageProcessingConfiguration.exposure = 1.0;
+            scene.imageProcessingConfiguration.contrast = 1.1;
+            scene.imageProcessingConfiguration.toneMappingEnabled = true;
+
+            // Create camera
+            const camera = new ArcRotateCamera(
+                "camera",
+                Math.PI,
+                Math.PI / 3,
+                10,
+                new Vector3(0, 0, 0),
+                scene
+            );
+
+            camera.minZ = 0.1;
+            camera.maxZ = 1000;
+            camera.wheelDeltaPercentage = 0.01;
+            camera.attachControl(canvasRef.current, true);
+
+            // Create lights
+            // Main hemisphere light for ambient illumination
+            const hemisphericLight = new HemisphericLight(
+                "hemisphericLight",
+                new Vector3(0, 1, 0),
+                scene
+            );
+            hemisphericLight.intensity = 1;
+            hemisphericLight.groundColor = new Color4(0.5, 0.5, 0.5, 0); // Transparent ground reflection
+
+            // Key light
+            const mainLight = new DirectionalLight(
+                "mainLight",
+                new Vector3(1, 2, 1),
+                scene
+            );
+            mainLight.intensity = 1.5;
+            mainLight.position = new Vector3(5, 10, 5);
+
+            // Fill light
+            const fillLight = new DirectionalLight(
+                "fillLight",
+                new Vector3(-1, 0.5, -1),
+                scene
+            );
+            fillLight.intensity = 0.75;
+            fillLight.position = new Vector3(-5, 5, -5);
+
+            // Back light for rim highlighting
+            const backLight = new DirectionalLight(
+                "backLight",
+                new Vector3(0, -1, 1),
+                scene
+            );
+            backLight.intensity = 0.5;
+            backLight.position = new Vector3(0, 10, -10);
+
+            // Setup environment for PBR materials
+            const envTexture = CubeTexture.CreateFromPrefilteredData(
+                "/environmentSpecular.env",
+                scene
+            );
+            scene.environmentTexture = envTexture;
+            scene.environmentIntensity = 1.2;
+
+            // Load model
+            SceneLoader.ImportMesh(
+                "",
+                "/",
+                "model.glb",
+                scene,
+                (meshes, particleSystems, skeletons, animationGroups) => {
+                    meshes.forEach((mesh) => {
+                        if (mesh.material) {
+                            mesh.material = setupMaterial(mesh.material, scene);
+                        }
+                        // Enable backface culling for better performance
+                        mesh.material.backFaceCulling = true;
+                    });
+
+                    // Set camera position after model loads
+                    camera.setPosition(new Vector3(0, 0, -10));
+                    camera.setTarget(Vector3.Zero());
+                    camera.alpha = Math.PI;
+                    camera.beta = Math.PI / 3;
+
+                    // Enable auto-rotation
+                    scene.onBeforeRenderObservable.add(() => {
+                        camera.alpha += (Math.PI / 180) * (4 / 60);
+                    });
+                }
+            );
+
+            // Start render loop
+            engineRef.current.runRenderLoop(() => {
+                scene.render();
+            });
+
+            // Handle window resize
+            const handleResize = () => {
+                engineRef.current.resize();
+            };
+            window.addEventListener('resize', handleResize);
+
+            // Cleanup
+            return () => {
+                window.removeEventListener('resize', handleResize);
+                scene.dispose();
+                engineRef.current.dispose();
+            };
         }
-    }, [scene]);
+    }, []);
 
-    return hasLoaded ? <primitive object={scene} scale={1} /> : null;
-}
-
-export function ModelViewer() {
     return (
-        <div className="w-screen h-screen">
-            <Canvas
-                camera={{
-                    position: [0, 0, 10],
-                    fov: 45,
-                    near: 0.1,
-                    far: 1000
-                }}
-                gl={{
-                    antialias: true,
-                    outputColorSpace: THREE.SRGBColorSpace,
-                    toneMapping: THREE.ReinhardToneMapping,
-                    toneMappingExposure: 1,
-                }}
-            >
-                <Environment preset="sunset" background={false} />
-
-                <ambientLight intensity={0.8} />
-                <directionalLight position={[5, 5, 5]} intensity={1} />
-                <directionalLight position={[-5, 5, -5]} intensity={0.5} />
-
-                <Model />
-
-                <OrbitControls
-                    autoRotate
-                    autoRotateSpeed={4}
-                    enableZoom={true}
-                    enablePan={true}
-                    minDistance={1}
-                    maxDistance={1000}
-                />
-            </Canvas>
-        </div>
+        <canvas
+            ref={canvasRef}
+            className="w-screen h-screen"
+            style={{
+                touchAction: 'none', // Prevents scroll on touch devices
+                background: 'transparent' // Ensure canvas background is transparent
+            }}
+        />
     );
 }
-
-useGLTF.preload('/model.glb');
