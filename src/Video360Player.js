@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
-const Video360Player = ({ videoUrl = 'video.mp4' }) => {
+const Video360Player = ({ videoUrl = 'joined_video.mp4' }) => {
     const containerRef = useRef(null);
     const sceneRef = useRef(null);
     const cameraRef = useRef(null);
