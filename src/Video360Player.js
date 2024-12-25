@@ -10,6 +10,7 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
     const sphereRef = useRef(null);
     const resizeObserverRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadingProgress, setLoadingProgress] = useState(0);
 
     useEffect(() => {
         const handleResize = () => {
@@ -20,11 +21,9 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
             const width = container.clientWidth - parseFloat(computedStyle.paddingLeft) - parseFloat(computedStyle.paddingRight);
             const height = container.clientHeight - parseFloat(computedStyle.paddingTop) - parseFloat(computedStyle.paddingBottom);
 
-            // Only update if dimensions are greater than 0
             if (width > 0 && height > 0) {
                 cameraRef.current.aspect = width / height;
                 cameraRef.current.updateProjectionMatrix();
-
                 rendererRef.current.setPixelRatio(window.devicePixelRatio);
                 rendererRef.current.setSize(width, height, false);
 
@@ -47,8 +46,8 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
         const init = () => {
             if (!containerRef.current) return;
 
+            // Set up scene first
             sceneRef.current = new THREE.Scene();
-
             cameraRef.current = new THREE.PerspectiveCamera(
                 75,
                 containerRef.current.clientWidth / containerRef.current.clientHeight,
@@ -66,17 +65,15 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
             rendererRef.current.setSize(1, 1, false);
             containerRef.current.appendChild(rendererRef.current.domElement);
 
+            // Create video element
             videoRef.current = document.createElement('video');
-            videoRef.current.src = videoUrl;
             videoRef.current.crossOrigin = 'anonymous';
             videoRef.current.loop = true;
             videoRef.current.muted = true;
             videoRef.current.playsInline = true;
+            videoRef.current.src = videoUrl;
 
-            videoRef.current.addEventListener('loadeddata', () => {
-                setIsLoading(false);
-            });
-
+            // Create video texture immediately
             const videoTexture = new THREE.VideoTexture(videoRef.current);
             videoTexture.minFilter = THREE.LinearFilter;
             videoTexture.magFilter = THREE.LinearFilter;
@@ -92,8 +89,31 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
             sphereRef.current = new THREE.Mesh(geometry, material);
             sceneRef.current.add(sphereRef.current);
 
-            // Set up ResizeObserver
-            resizeObserverRef.current = new ResizeObserver((entries) => {
+            // For Google Drive URLs, we'll simulate progress
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 2;
+                if (progress > 98) {
+                    clearInterval(progressInterval);
+                }
+                setLoadingProgress(progress);
+            }, 100);
+
+            videoRef.current.addEventListener('canplay', () => {
+                clearInterval(progressInterval);
+                setLoadingProgress(100);
+                videoRef.current.play();
+                setIsLoading(false);
+            });
+
+            videoRef.current.addEventListener('error', (e) => {
+                console.error('Video error:', e);
+                clearInterval(progressInterval);
+                setIsLoading(false);
+            });
+
+            // Set up resize observer
+            resizeObserverRef.current = new ResizeObserver(entries => {
                 for (const entry of entries) {
                     if (entry.target === containerRef.current) {
                         handleResize();
@@ -101,14 +121,10 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
                 }
             });
 
-            // Observe container element
             resizeObserverRef.current.observe(containerRef.current);
-
-            // Also keep window resize listener for viewport changes
             window.addEventListener('resize', handleResize);
 
             animate();
-            videoRef.current.play();
             handleResize();
         };
 
@@ -126,7 +142,6 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
         };
     }, [videoUrl]);
 
-    // Handle shared interaction updates
     useEffect(() => {
         if (sphereRef.current && interactionState.deltaMove) {
             sphereRef.current.rotation.y += interactionState.deltaMove.x * 0.01;
@@ -141,12 +156,22 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         >
             {isLoading && (
-                <div className="absolute inset-0 bg-black">
+                <div className="absolute inset-0 bg-black flex flex-col items-center justify-center">
                     <img
                         src="/background.jpg"
                         alt="Loading background"
-                        className="w-full h-full object-cover"
+                        className="absolute w-full h-full object-cover opacity-50"
                     />
+                    <div className="relative z-10 text-white text-center">
+                        <div className="text-2xl font-bold mb-4">Cargando experiencia jurásica...</div>
+                        <div className="w-64 h-2 bg-gray-700 rounded-full">
+                            <div
+                                className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                                style={{ width: `${loadingProgress}%` }}
+                            />
+                        </div>
+                        <div className="mt-2">{loadingProgress}%</div>
+                    </div>
                 </div>
             )}
         </div>
