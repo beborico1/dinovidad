@@ -1,18 +1,82 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { ModelViewer } from './ModelViewer';  // Make sure to create this file
+import { ModelViewer } from './ModelViewer';
 import Video360Player from './Video360Player';
+
+// Custom hook to manage shared interaction state
+const useSharedInteraction = () => {
+  const [isInteracting, setIsInteracting] = useState(false);
+  const [lastPosition, setLastPosition] = useState({ x: 0, y: 0 });
+  const [deltaMove, setDeltaMove] = useState({ x: 0, y: 0 });
+
+  const handleStart = (x, y) => {
+    setIsInteracting(true);
+    setLastPosition({ x, y });
+  };
+
+  const handleMove = (x, y) => {
+    if (isInteracting) {
+      const deltaX = x - lastPosition.x;
+      const deltaY = y - lastPosition.y;
+      setDeltaMove({ x: deltaX, y: deltaY });
+      setLastPosition({ x, y });
+    }
+  };
+
+  const handleEnd = () => {
+    setIsInteracting(false);
+  };
+
+  return {
+    isInteracting,
+    deltaMove,
+    handlers: {
+      handleStart,
+      handleMove,
+      handleEnd
+    }
+  };
+};
 
 const DinosaurioNavidad = () => {
   const [mounted, setMounted] = useState(false);
+  const sharedInteraction = useSharedInteraction();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  const handleMouseDown = (e) => {
+    sharedInteraction.handlers.handleStart(e.clientX, e.clientY);
+  };
+
+  const handleMouseMove = (e) => {
+    sharedInteraction.handlers.handleMove(e.clientX, e.clientY);
+  };
+
+  const handleMouseUp = () => {
+    sharedInteraction.handlers.handleEnd();
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      sharedInteraction.handlers.handleStart(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches.length === 1) {
+      sharedInteraction.handlers.handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    sharedInteraction.handlers.handleEnd();
+  };
+
   // Generate falling elements with proper timing using useMemo
   const fallingElements = React.useMemo(() => {
     return Array(50).fill(null).map((_, i) => {
-      const duration = 4 + Math.random() * 8; // 60-100 seconds
+      const duration = 4 + Math.random() * 8;
       const delay = Math.random() * 45;
       const leftPos = Math.random() * 150;
       return {
@@ -31,21 +95,33 @@ const DinosaurioNavidad = () => {
         }
       };
     });
-  }, []); // Empty dependency array means this will only run once
+  }, []);
 
   return (
-    <div className="h-full w-full overflow-hidden relative" style={{ backgroundImage: 'url(/background.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
+    <div
+      className="relative w-full h-full"
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Video360Player as background */}
+      <div className="absolute inset-0 w-full h-full">
+        <Video360Player interactionState={sharedInteraction} />
+      </div>
 
-      {/* <Video360Player /> */}
-
-      <div className="relative w-full h-full">
-        <div className="absolute w-full h-full left-1/2 -translate-x-1/2 z-10">
+      {/* Content layer */}
+      <div className="relative w-full h-full z-10 pointer-events-none">
+        <div className="absolute w-full h-full left-1/2 -translate-x-1/2">
           <Suspense fallback={<div className="text-2xl">Cargando modelo...</div>}>
-            <ModelViewer />
+            <ModelViewer interactionState={sharedInteraction} />
           </Suspense>
         </div>
 
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 z-10">
+        <div className="absolute top-8 left-1/2 -translate-x-1/2">
           <div className="bg-red-500/80 text-white px-6 py-3 rounded-full shadow-lg animate-bounce">
             <span className="text-xl font-bold">Te amo Abril, ¡Feliz Navidad! 🎄</span>
           </div>
@@ -54,7 +130,7 @@ const DinosaurioNavidad = () => {
         {mounted && fallingElements.map(element => (
           <div
             key={`element-${element.id}`}
-            className="absolute"
+            className="absolute pointer-events-none"
             style={{
               ...element.style,
               animation: `falling ${element.duration}s linear ${element.delay}s infinite`
@@ -66,7 +142,7 @@ const DinosaurioNavidad = () => {
               <img
                 src={`/photos/${element.photoIndex}.png`}
                 alt={`Photo ${element.photoIndex}`}
-                className="w-32 h-32 rounded-lg shadow-l object-cover"
+                className="w-32 h-32 rounded-lg shadow-lg object-cover"
               />
             )}
           </div>
@@ -91,7 +167,7 @@ const DinosaurioNavidad = () => {
           }
         }
       `}</style>
-    </div >
+    </div>
   );
 };
 

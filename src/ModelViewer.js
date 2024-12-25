@@ -15,12 +15,10 @@ import {
 } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
 
-// We'll keep the original materials from the GLB
 const setupMaterial = (material, scene) => {
     if (material) {
-        // Ensure PBR materials are properly configured
         if (material instanceof PBRMaterial) {
-            material.transparencyMode = 0; // OPAQUE
+            material.transparencyMode = 0;
             material.metallicF0Factor = 1.0;
             material.useRoughnessFromMetallicTextureBlue = true;
             material.useMetallicFromMetallicTextureBlue = true;
@@ -31,14 +29,22 @@ const setupMaterial = (material, scene) => {
     return material;
 };
 
-export function ModelViewer() {
+export function ModelViewer({ interactionState }) {
     const canvasRef = useRef(null);
     const engineRef = useRef(null);
     const sceneRef = useRef(null);
+    const cameraRef = useRef(null);
+
+    // Handle shared interaction updates
+    useEffect(() => {
+        if (cameraRef.current && interactionState.deltaMove) {
+            cameraRef.current.alpha += interactionState.deltaMove.x * 0.01;
+            cameraRef.current.beta += interactionState.deltaMove.y * 0.01;
+        }
+    }, [interactionState.deltaMove]);
 
     useEffect(() => {
         if (canvasRef.current) {
-            // Create engine with alpha support
             engineRef.current = new Engine(canvasRef.current, true, {
                 preserveDrawingBuffer: true,
                 stencil: true,
@@ -47,42 +53,40 @@ export function ModelViewer() {
                 alpha: true
             });
 
-            // Create scene
             sceneRef.current = new Scene(engineRef.current);
             const scene = sceneRef.current;
 
-            // Set transparent background
             scene.clearColor = new Color4(0, 0, 0, 0);
             scene.imageProcessingConfiguration.exposure = 1.0;
             scene.imageProcessingConfiguration.contrast = 1.1;
             scene.imageProcessingConfiguration.toneMappingEnabled = true;
 
             // Create camera
-            const camera = new ArcRotateCamera(
+            cameraRef.current = new ArcRotateCamera(
                 "camera",
-                Math.PI,
-                Math.PI / 3,
-                10,
+                0,
+                0,
+                0,
                 new Vector3(0, 0, 0),
                 scene
             );
 
-            camera.minZ = 0.1;
-            camera.maxZ = 1000;
-            camera.wheelDeltaPercentage = 0.01;
-            camera.attachControl(canvasRef.current, true);
+            cameraRef.current.minZ = 0.1;
+            cameraRef.current.maxZ = 1000;
+            cameraRef.current.wheelDeltaPercentage = 0.01;
+
+            // Disable default camera controls since we're using shared controls
+            cameraRef.current.attachControl(canvasRef.current, false);
 
             // Create lights
-            // Main hemisphere light for ambient illumination
             const hemisphericLight = new HemisphericLight(
                 "hemisphericLight",
                 new Vector3(0, 1, 0),
                 scene
             );
             hemisphericLight.intensity = 1;
-            hemisphericLight.groundColor = new Color4(0.5, 0.5, 0.5, 0); // Transparent ground reflection
+            hemisphericLight.groundColor = new Color4(0.5, 0.5, 0.5, 0);
 
-            // Key light
             const mainLight = new DirectionalLight(
                 "mainLight",
                 new Vector3(1, 2, 1),
@@ -91,7 +95,6 @@ export function ModelViewer() {
             mainLight.intensity = 1.5;
             mainLight.position = new Vector3(5, 10, 5);
 
-            // Fill light
             const fillLight = new DirectionalLight(
                 "fillLight",
                 new Vector3(-1, 0.5, -1),
@@ -100,7 +103,6 @@ export function ModelViewer() {
             fillLight.intensity = 0.75;
             fillLight.position = new Vector3(-5, 5, -5);
 
-            // Back light for rim highlighting
             const backLight = new DirectionalLight(
                 "backLight",
                 new Vector3(0, -1, 1),
@@ -109,13 +111,17 @@ export function ModelViewer() {
             backLight.intensity = 0.5;
             backLight.position = new Vector3(0, 10, -10);
 
-            // Setup environment for PBR materials
-            const envTexture = CubeTexture.CreateFromPrefilteredData(
-                "/environmentSpecular.env",
-                scene
-            );
-            scene.environmentTexture = envTexture;
-            scene.environmentIntensity = 1.2;
+            // Setup environment
+            try {
+                const envTexture = CubeTexture.CreateFromPrefilteredData(
+                    "/environmentSpecular.env",
+                    scene
+                );
+                scene.environmentTexture = envTexture;
+                scene.environmentIntensity = 1.2;
+            } catch (error) {
+                console.log('Environment map not available, using default lighting');
+            }
 
             // Load model
             SceneLoader.ImportMesh(
@@ -127,21 +133,16 @@ export function ModelViewer() {
                     meshes.forEach((mesh) => {
                         if (mesh.material) {
                             mesh.material = setupMaterial(mesh.material, scene);
+                            mesh.material.backFaceCulling = true;
                         }
-                        // Enable backface culling for better performance
-                        mesh.material.backFaceCulling = true;
                     });
 
                     // Set camera position after model loads
-                    camera.setPosition(new Vector3(0, 0, -10));
-                    camera.setTarget(Vector3.Zero());
-                    camera.alpha = Math.PI;
-                    camera.beta = Math.PI / 3;
-
-                    // Enable auto-rotation
-                    scene.onBeforeRenderObservable.add(() => {
-                        camera.alpha += (Math.PI / 180) * (4 / 60);
-                    });
+                    cameraRef.current.setTarget(new Vector3(0, 0, 0));
+                    cameraRef.current.alpha = Math.PI * 1.3;
+                    cameraRef.current.beta = Math.PI * 0.3;
+                    cameraRef.current.target.y = 4;
+                    cameraRef.current.radius = 10;
                 }
             );
 
@@ -170,9 +171,12 @@ export function ModelViewer() {
             ref={canvasRef}
             className="w-screen h-screen"
             style={{
-                touchAction: 'none', // Prevents scroll on touch devices
-                background: 'transparent' // Ensure canvas background is transparent
+                touchAction: 'none',
+                background: 'transparent',
+                pointerEvents: 'none' // Allow interactions to pass through to the video layer
             }}
         />
     );
 }
+
+export default ModelViewer;
