@@ -1,0 +1,21 @@
+{
+    "headers": [
+        {
+            "source": "/(.*).mp4",
+            "headers": [
+                {
+                    "key": "Content-Type",
+                    "value": "video/mp4"
+                },
+                {
+                    "key": "Access-Control-Allow-Origin",
+                    "value": "*"
+                },
+                {
+                    "key": "Accept-Ranges",
+                    "value": "bytes"
+                }
+            ]
+        }
+    ]
+}
