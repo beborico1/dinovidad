@@ -8,6 +8,7 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
     const rendererRef = useRef(null);
     const videoRef = useRef(null);
     const sphereRef = useRef(null);
+    const resizeObserverRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -19,19 +20,22 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
             const width = container.clientWidth - parseFloat(computedStyle.paddingLeft) - parseFloat(computedStyle.paddingRight);
             const height = container.clientHeight - parseFloat(computedStyle.paddingTop) - parseFloat(computedStyle.paddingBottom);
 
-            cameraRef.current.aspect = width / height;
-            cameraRef.current.updateProjectionMatrix();
+            // Only update if dimensions are greater than 0
+            if (width > 0 && height > 0) {
+                cameraRef.current.aspect = width / height;
+                cameraRef.current.updateProjectionMatrix();
 
-            rendererRef.current.setPixelRatio(window.devicePixelRatio);
-            rendererRef.current.setSize(width, height, false);
+                rendererRef.current.setPixelRatio(window.devicePixelRatio);
+                rendererRef.current.setSize(width, height, false);
 
-            const canvas = rendererRef.current.domElement;
-            canvas.style.width = '100%';
-            canvas.style.height = '100%';
-            canvas.style.position = 'absolute';
-            canvas.style.top = '0';
-            canvas.style.left = '0';
-            canvas.style.objectFit = 'cover';
+                const canvas = rendererRef.current.domElement;
+                canvas.style.width = '100%';
+                canvas.style.height = '100%';
+                canvas.style.position = 'absolute';
+                canvas.style.top = '0';
+                canvas.style.left = '0';
+                canvas.style.objectFit = 'cover';
+            }
         };
 
         const animate = () => {
@@ -88,6 +92,19 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
             sphereRef.current = new THREE.Mesh(geometry, material);
             sceneRef.current.add(sphereRef.current);
 
+            // Set up ResizeObserver
+            resizeObserverRef.current = new ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    if (entry.target === containerRef.current) {
+                        handleResize();
+                    }
+                }
+            });
+
+            // Observe container element
+            resizeObserverRef.current.observe(containerRef.current);
+
+            // Also keep window resize listener for viewport changes
             window.addEventListener('resize', handleResize);
 
             animate();
@@ -100,6 +117,10 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
         return () => {
             if (containerRef.current && rendererRef.current) {
                 containerRef.current.removeChild(rendererRef.current.domElement);
+            }
+            if (resizeObserverRef.current && containerRef.current) {
+                resizeObserverRef.current.unobserve(containerRef.current);
+                resizeObserverRef.current.disconnect();
             }
             window.removeEventListener('resize', handleResize);
         };

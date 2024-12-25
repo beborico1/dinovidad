@@ -71,17 +71,18 @@ const GiftAnimation = () => {
                 src="/song.mp3"
                 loop
             />
-
-            <img
-                src={getGifSource()}
-                alt={`Gift ${animationState} state`}
-                className="cursor-pointer object-cover w-64 h-64 z-20"
-                onClick={handleClick}
-                style={{
-                    opacity: expandStage === 2 ? 0 : 1,
-                    transition: 'opacity 0.5s ease-in-out'
-                }}
-            />
+            {animationState !== 'final' &&
+                <img
+                    src={getGifSource()}
+                    alt={`Gift ${animationState} state`}
+                    className="cursor-pointer object-cover w-64 h-64 z-20"
+                    onClick={handleClick}
+                    style={{
+                        opacity: expandStage === 2 ? 0 : 1,
+                        transition: 'opacity 0.5s ease-in-out'
+                    }}
+                />
+            }
 
             {/* Expanding center div */}
             <div
