@@ -11,6 +11,7 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
     const resizeObserverRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [loadingProgress, setLoadingProgress] = useState(0);
+    const [needsPlayback, setNeedsPlayback] = useState(true);
 
     useEffect(() => {
         const handleResize = () => {
@@ -46,40 +47,49 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
         const init = () => {
             if (!containerRef.current) return;
 
-            // Set up scene first
+            // Scene setup
             sceneRef.current = new THREE.Scene();
+
+            // Camera setup with better initial position for 360 viewing
             cameraRef.current = new THREE.PerspectiveCamera(
                 75,
                 containerRef.current.clientWidth / containerRef.current.clientHeight,
-                1,
+                0.1,
                 1000
             );
             cameraRef.current.position.set(0, 0, 0.1);
+            cameraRef.current.lookAt(0, 0, 0);
 
+            // Renderer setup with better performance options
             rendererRef.current = new THREE.WebGLRenderer({
                 antialias: true,
                 alpha: true,
-                powerPreference: "high-performance"
+                powerPreference: "high-performance",
+                logarithmicDepthBuffer: true
             });
 
+            rendererRef.current.setPixelRatio(window.devicePixelRatio);
             rendererRef.current.setSize(1, 1, false);
             containerRef.current.appendChild(rendererRef.current.domElement);
 
-            // Create video element
+            // Video element setup
             videoRef.current = document.createElement('video');
             videoRef.current.crossOrigin = 'anonymous';
             videoRef.current.loop = true;
             videoRef.current.muted = true;
             videoRef.current.playsInline = true;
+            videoRef.current.setAttribute('playsinline', '');
             videoRef.current.src = videoUrl;
 
-            // Create video texture immediately
+            // Create video texture
             const videoTexture = new THREE.VideoTexture(videoRef.current);
             videoTexture.minFilter = THREE.LinearFilter;
             videoTexture.magFilter = THREE.LinearFilter;
             videoTexture.format = THREE.RGBAFormat;
+            videoTexture.generateMipmaps = false;
 
-            const geometry = new THREE.SphereGeometry(500, 60, 40);
+            // Optimized geometry for mobile
+            const geometry = new THREE.SphereGeometry(500, 32, 24);
             geometry.scale(-1, 1, 1);
 
             const material = new THREE.MeshBasicMaterial({
@@ -89,7 +99,7 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
             sphereRef.current = new THREE.Mesh(geometry, material);
             sceneRef.current.add(sphereRef.current);
 
-            // For Google Drive URLs, we'll simulate progress
+            // Progress simulation
             let progress = 0;
             const progressInterval = setInterval(() => {
                 progress += 2;
@@ -102,7 +112,11 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
             videoRef.current.addEventListener('canplay', () => {
                 clearInterval(progressInterval);
                 setLoadingProgress(100);
-                videoRef.current.play();
+
+                videoRef.current.play().catch(() => {
+                    setNeedsPlayback(true);
+                });
+
                 setIsLoading(false);
             });
 
@@ -112,7 +126,7 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
                 setIsLoading(false);
             });
 
-            // Set up resize observer
+            // Resize observer setup
             resizeObserverRef.current = new ResizeObserver(entries => {
                 for (const entry of entries) {
                     if (entry.target === containerRef.current) {
@@ -139,6 +153,11 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
                 resizeObserverRef.current.disconnect();
             }
             window.removeEventListener('resize', handleResize);
+            if (videoRef.current) {
+                videoRef.current.pause();
+                videoRef.current.src = '';
+                videoRef.current.load();
+            }
         };
     }, [videoUrl]);
 
@@ -149,28 +168,64 @@ const Video360Player = ({ videoUrl = 'video.mp4', interactionState }) => {
         }
     }, [interactionState.deltaMove]);
 
+    // Handle user interaction to start playback
+    const handlePlaybackStart = () => {
+        if (videoRef.current && needsPlayback) {
+            videoRef.current.play().then(() => {
+                setNeedsPlayback(false);
+            }).catch(error => {
+                console.error('Playback failed:', error);
+            });
+        }
+    };
+
     return (
         <div
             ref={containerRef}
             className="w-full h-full"
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            onClick={handlePlaybackStart}
         >
-            {isLoading && (
-                <div className="absolute inset-0 bg-black flex flex-col items-center justify-center">
-                    <img
-                        src="/background.jpg"
-                        alt="Loading background"
-                        className="absolute w-full h-full object-cover opacity-50"
-                    />
-                    <div className="relative z-10 text-white text-center">
-                        <div className="text-2xl font-bold mb-4">Cargando experiencia jurásica...</div>
-                        <div className="w-64 h-2 bg-gray-700 rounded-full">
-                            <div
-                                className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                                style={{ width: `${loadingProgress}%` }}
-                            />
+            {(isLoading || needsPlayback) && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                    {/* Background image with overlay */}
+                    <div className="absolute inset-0">
+                        <img
+                            src="/background.jpg"
+                            alt="Loading background"
+                            className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black bg-opacity-50" />
+                    </div>
+
+                    {/* Loading or Start UI */}
+                    <div className="relative z-10 w-full max-w-md mx-auto px-4">
+                        <div className="text-center">
+                            <h2 className="text-white text-2xl font-bold mb-6">
+                                {isLoading ? 'Cargando Experiencia Jurasica...' : 'Listo para comenzar'}
+                            </h2>
+
+                            {isLoading ? (
+                                <>
+                                    <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-blue-500 transition-all duration-300 ease-out rounded-full"
+                                            style={{ width: `${loadingProgress}%` }}
+                                        />
+                                    </div>
+                                    <div className="text-white mt-2">
+                                        {loadingProgress}%
+                                    </div>
+                                </>
+                            ) : (
+                                <button
+                                    onClick={handlePlaybackStart}
+                                    className="px-6 py-3 bg-white rounded-lg shadow-lg text-gray-800 hover:bg-gray-100 transition-colors duration-200"
+                                >
+                                    Comenzar Experiencia
+                                </button>
+                            )}
                         </div>
-                        <div className="mt-2">{loadingProgress}%</div>
                     </div>
                 </div>
             )}
