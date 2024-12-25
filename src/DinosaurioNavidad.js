@@ -79,19 +79,24 @@ const DinosaurioNavidad = () => {
       const duration = 4 + Math.random() * 8;
       const delay = Math.random() * 45;
       const leftPos = Math.random() * 150;
+      const isPhoto = Math.random() > 0.5;
+      const isBehindModel = isPhoto && Math.random() > 0.5; // 50% of photos will be behind
+
       return {
         id: i,
         delay,
         duration,
         scale: 0.2 + Math.random() * 0.2,
-        type: Math.random() > 0.5 ? 'heart' : 'photo',
+        type: isPhoto ? 'photo' : 'heart',
         photoIndex: Math.floor(Math.random() * 20) + 1,
+        isBehindModel,
         style: {
           left: `${leftPos}%`,
           animationDuration: `${duration}s`,
           animationDelay: `${delay}s`,
           top: '-180px',
-          position: 'absolute'
+          position: 'absolute',
+          zIndex: isBehindModel ? 5 : 15 // Behind model photos at z-5, others at z-15
         }
       };
     });
@@ -109,19 +114,20 @@ const DinosaurioNavidad = () => {
       onTouchEnd={handleTouchEnd}
     >
       {/* Video360Player as background */}
-      <div className="absolute inset-0 w-full h-full">
+      <div className="absolute inset-0 w-full h-full z-0">
         <Video360Player interactionState={sharedInteraction} />
       </div>
 
       {/* Content layer */}
-      <div className="relative w-full h-full z-10 pointer-events-none">
-        <div className="absolute w-full h-full left-1/2 -translate-x-1/2">
+      <div className="relative w-full h-full pointer-events-none">
+        {/* Model layer - z-index 10 */}
+        <div className="absolute w-full h-full left-1/2 -translate-x-1/2 z-10">
           <Suspense fallback={<div className="text-2xl">Cargando modelo...</div>}>
             <ModelViewer interactionState={sharedInteraction} />
           </Suspense>
         </div>
 
-        <div className="absolute top-8 left-1/2 -translate-x-1/2">
+        <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20">
           <div className="bg-red-500/80 text-white px-6 py-3 rounded-full shadow-lg animate-bounce">
             <span className="text-xl font-bold">Te amo Abril, ¡Feliz Navidad! 🎄</span>
           </div>
@@ -142,7 +148,8 @@ const DinosaurioNavidad = () => {
               <img
                 src={`/photos/${element.photoIndex}.png`}
                 alt={`Photo ${element.photoIndex}`}
-                className="w-32 h-32 rounded-lg shadow-lg object-cover"
+                className={`rounded-lg shadow-lg object-cover ${element.isBehindModel ? 'w-24 h-24' : 'w-32 h-32'
+                  }`}
               />
             )}
           </div>
